@@ -1,0 +1,8 @@
+# Bỏ qua thư mục chứa dữ liệu thô
+raw_data/
+
+# Bỏ qua các file rác của Python và môi trường ảo
+__pycache__/
+*.pyc
+.venv/
+venv/
