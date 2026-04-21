@@ -1,6 +1,6 @@
 import json
 from time import time
-from transformers import pipeline
+from transformers import pipeline, AutoTokenizer
 from kafka import KafkaConsumer, KafkaProducer
 
 # ====== CONFIG ======
@@ -17,9 +17,15 @@ MODEL_NAME = "cardiffnlp/twitter-roberta-base-sentiment"
 MODEL_VERSION = "1.0"
 
 # ====== LOAD MODEL ======
+# Load tokenizer riêng để kiểm soát tốt hơn
+tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+
 classifier = pipeline(
     "sentiment-analysis",
-    model=MODEL_NAME
+    model=MODEL_NAME,
+    tokenizer=tokenizer,      
+    truncation=True,        # Kích hoạt cắt tỉa
+    max_length=512          # Giới hạn tối đa của RoBERTa
 )
 
 label_map = {
