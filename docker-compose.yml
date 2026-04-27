@@ -17,7 +17,7 @@ services:
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
 
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://127.0.0.1:29092
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
 
@@ -44,9 +44,21 @@ services:
     command: taskmanager
     environment:
       - JOB_MANAGER_RPC_ADDRESS=jobmanager
+  postgres:
+    image: postgres:15
+    networks: [flink-net]
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: abc
+      POSTGRES_DB: sentiment_db
+    volumes:
+      - pg-data:/var/lib/postgresql/data
 
 networks:
   flink-net:
 
 volumes:
   kafka-data:
+  pg-data:
