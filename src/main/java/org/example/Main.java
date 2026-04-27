@@ -35,7 +35,7 @@ public class Main {
         // 1. Tạo Kafka topics
         // ========================
         Properties props = new Properties();
-        props.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, "kafka:29092");
+        props.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, "kafka:9092"); //dùng port 29092 thay vì 9092 nếu test local
 
         try (AdminClient admin = AdminClient.create(props)) {
 
@@ -65,7 +65,7 @@ public class Main {
         // ========================
         KafkaSource<String> source =
                 KafkaSource.<String>builder()
-                        .setBootstrapServers("kafka:9092")
+                        .setBootstrapServers("kafka:9092")//dùng port 29092 thay vì 9092 nếu test local
                         .setTopics("social_media_stream")
                         .setGroupId("flink-group")
                         .setValueOnlyDeserializer(
@@ -98,7 +98,7 @@ public class Main {
 
         KafkaSink<SocialMediaComment> sink =
                 KafkaSink.<SocialMediaComment>builder()
-                        .setBootstrapServers("kafka:9092")
+                        .setBootstrapServers("kafka:9092")//dùng port 29092 thay vì 9092 nếu test local
                         .setRecordSerializer(
                                 KafkaRecordSerializationSchema.builder()
                                         .setTopic("processed_comments")
