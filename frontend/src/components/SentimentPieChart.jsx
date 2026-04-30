@@ -14,8 +14,8 @@ export default function SentimentPieChart({ overview }) {
   return (
     <div className="card">
       <div className="card-title">Phân bổ Sentiment</div>
-      <ResponsiveContainer width="100%" height={260}>
-        <PieChart>
+      <ResponsiveContainer width="100%" height={300}>
+        <PieChart margin={{ top: 30, right: 30, bottom: 0, left: 30 }}>
           <Pie
             data={data}
             cx="50%"
@@ -25,7 +25,7 @@ export default function SentimentPieChart({ overview }) {
             paddingAngle={3}
             dataKey="value"
             label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-            labelLine={false}
+            labelLine={true}
           >
             {data.map(entry => (
               <Cell key={entry.name} fill={COLORS[entry.name.toLowerCase()]} />
