@@ -46,6 +46,10 @@ venv/
 ## Raw Data ##
 data_ingestion/raw_data/
 
+### Demo scripts ###
+logs/
+.demo.pids
+
 ### Node.js ###
 node_modules/
 npm-debug.log*
