@@ -6,7 +6,7 @@ import SentimentPieChart from './components/SentimentPieChart.jsx';
 import TrendChart       from './components/TrendChart.jsx';
 import ReviewTable      from './components/ReviewTable.jsx';
 
-const REFRESH_INTERVAL = 10_000; // 10s realtime refresh
+const REFRESH_INTERVAL = 5_000;
 
 export default function App() {
   const [dateRange,    setDateRange]    = useState('7d');
@@ -24,27 +24,26 @@ export default function App() {
     fetchProducts().then(setProducts).catch(console.error);
   }, []);
 
-  // Reload overview + trend when filters change
-  useEffect(() => {
+  const loadAll = useCallback(() => {
     fetchOverview(dateRange, productAsin || undefined).then(setOverview).catch(console.error);
     fetchTrend(dateRange, productAsin || undefined).then(setTrend).catch(console.error);
-    setPage(1);
-  }, [dateRange, productAsin]);
-
-  // Reload reviews when filters or page change
-  const loadReviews = useCallback(() => {
     fetchReviews(dateRange, productAsin || undefined, undefined, page)
       .then(r => { setReviews(r.data); setReviewTotal(r.total); })
       .catch(console.error);
   }, [dateRange, productAsin, page]);
 
-  useEffect(() => { loadReviews(); }, [loadReviews]);
-
-  // Auto-refresh reviews every 10s
+  // Reload on filter/page change
   useEffect(() => {
-    const id = setInterval(loadReviews, REFRESH_INTERVAL);
+    setPage(1);
+  }, [dateRange, productAsin]);
+
+  useEffect(() => { loadAll(); }, [loadAll]);
+
+  // Auto-refresh every 5s
+  useEffect(() => {
+    const id = setInterval(loadAll, REFRESH_INTERVAL);
     return () => clearInterval(id);
-  }, [loadReviews]);
+  }, [loadAll]);
 
   return (
     <div className="dashboard">
