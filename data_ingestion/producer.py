@@ -1,17 +1,22 @@
 import json
+import os
 import time
+from dotenv import load_dotenv
 from kafka import KafkaProducer
 
 from data import stream_multisource_data
 
+load_dotenv()
+
+KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:29092")
+TOPIC_NAME = os.getenv("KAFKA_TOPIC_INPUT", "social_media_stream")
+BATCH_SIZE = int(os.getenv("PRODUCER_BATCH_SIZE", 10))
+SLEEP_TIME = float(os.getenv("PRODUCER_SLEEP_TIME", 0.5))
+
 producer = KafkaProducer(
-    bootstrap_servers=['127.0.0.1:29092'],
+    bootstrap_servers=[KAFKA_BOOTSTRAP],
     value_serializer=lambda v: json.dumps(v).encode('utf-8')
 )
-
-TOPIC_NAME = 'social_media_stream'
-BATCH_SIZE = 10
-SLEEP_TIME = 0.5
 
 print("🚀 Starting Kafka Producer (Multi-source)...")
 

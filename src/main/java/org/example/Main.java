@@ -10,6 +10,7 @@ import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.kafka.clients.admin.*;
 
 import java.util.Arrays;
+import java.util.Map;
 import java.util.Properties;
 
 public class Main {
@@ -31,17 +32,24 @@ public class Main {
     }
     public static void main(String[] args) throws Exception {
 
+        Map<String, String> env = System.getenv();
+        String kafkaBootstrap = env.getOrDefault("KAFKA_BOOTSTRAP_SERVERS_INTERNAL", "kafka:9092");
+        String topicInput = env.getOrDefault("KAFKA_TOPIC_INPUT", "social_media_stream");
+        String topicProcessed = env.getOrDefault("KAFKA_TOPIC_PROCESSED", "processed_comments");
+        String topicSentiment = env.getOrDefault("KAFKA_TOPIC_SENTIMENT_INPUT", "sentiment-input");
+        String flinkGroup = env.getOrDefault("KAFKA_GROUP_FLINK", "flink-group");
+
         // ========================
         // 1. Tạo Kafka topics
         // ========================
         Properties props = new Properties();
-        props.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, "kafka:9092"); //dùng port 29092 thay vì 9092 nếu test local
+        props.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, kafkaBootstrap);
 
         try (AdminClient admin = AdminClient.create(props)) {
 
-            NewTopic topic1 = new NewTopic("social_media_stream", 3, (short) 1);
-            NewTopic topic2 = new NewTopic("processed_comments", 3, (short) 1);
-            NewTopic topic3 = new NewTopic("sentiment-input", 3, (short) 1);
+            NewTopic topic1 = new NewTopic(topicInput, 3, (short) 1);
+            NewTopic topic2 = new NewTopic(topicProcessed, 3, (short) 1);
+            NewTopic topic3 = new NewTopic(topicSentiment, 3, (short) 1);
 
             admin.createTopics(Arrays.asList(topic1, topic2, topic3)).all().get();
 
@@ -55,24 +63,24 @@ public class Main {
         // ========================
         // 2. Flink environment
         // ========================
-        StreamExecutionEnvironment env =
+        StreamExecutionEnvironment env2 =
                 StreamExecutionEnvironment.getExecutionEnvironment();
 
-        env.setParallelism(1);
+        env2.setParallelism(1);
 
         // ========================
         // 3. Kafka Source
         // ========================
         KafkaSource<String> source =
                 KafkaSource.<String>builder()
-                        .setBootstrapServers("kafka:9092")//dùng port 29092 thay vì 9092 nếu test local
-                        .setTopics("social_media_stream")
-                        .setGroupId("flink-group")
+                        .setBootstrapServers(kafkaBootstrap)
+                        .setTopics(topicInput)
+                        .setGroupId(flinkGroup)
                         .setValueOnlyDeserializer(
                                 new SimpleStringSchema()
                         )
                         .build();
-        DataStream<String> rawStream = env.fromSource(
+        DataStream<String> rawStream = env2.fromSource(
                 source,
                 WatermarkStrategy.noWatermarks(),
                 "Kafka Source"
@@ -98,10 +106,10 @@ public class Main {
 
         KafkaSink<SocialMediaComment> sink =
                 KafkaSink.<SocialMediaComment>builder()
-                        .setBootstrapServers("kafka:9092")//dùng port 29092 thay vì 9092 nếu test local
+                        .setBootstrapServers(kafkaBootstrap)
                         .setRecordSerializer(
                                 KafkaRecordSerializationSchema.builder()
-                                        .setTopic("processed_comments")
+                                        .setTopic(topicProcessed)
                                         .setValueSerializationSchema(
                                                 new GenericValueSerializationSchema<SocialMediaComment>()
                                         )
@@ -110,6 +118,6 @@ public class Main {
                         .build();
 
         parsed.sinkTo(sink);
-        env.execute("Kafka → Flink Demo");
+        env2.execute("Kafka → Flink Demo");
     }
 }

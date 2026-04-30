@@ -1,18 +1,22 @@
 import json
+import os
 import psycopg2
+from dotenv import load_dotenv
 from confluent_kafka import Consumer
+
+load_dotenv()
 
 # Cấu hình kết nối
 DB_CONFIG = {
-    "host": "localhost", # Do kết nối từ máy ngoài vào docker
-    "database": "sentiment_db",
-    "user": "admin",
-    "password": "abc"
+    "host": os.getenv("DB_HOST", "localhost"),
+    "database": os.getenv("DB_NAME", "sentiment_db"),
+    "user": os.getenv("DB_USER", "admin"),
+    "password": os.getenv("DB_PASSWORD", "abc"),
 }
 
 KAFKA_CONFIG = {
-    'bootstrap.servers': 'localhost:29092',
-    'group.id': 'python-db-writer-group',
+    'bootstrap.servers': os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:29092"),
+    'group.id': os.getenv("KAFKA_GROUP_DB_WRITER", "python-db-writer-group"),
     'auto.offset.reset': 'earliest'
 }
 
@@ -45,16 +49,15 @@ def insert_to_db(conn, data):
             INSERT INTO SentimentResult (review_id, model_version_id, sentiment_label, confidence_score, processed_time)
             VALUES (%s, %s, %s, %s, %s);
         """, (data['id'], 'svm-v1.0', data['sentiment'], data['score'], data['processed_time']))
-        
+
     conn.commit()
     print(f"✅ Đã lưu review {data['id']} vào Database.")
 
 if __name__ == '__main__':
     conn = psycopg2.connect(**DB_CONFIG)
     consumer = Consumer(KAFKA_CONFIG)
-    # Lắng nghe đúng topic Flink đẩy ra
-    consumer.subscribe(['processed_comments']) 
-    
+    consumer.subscribe([os.getenv("KAFKA_TOPIC_PROCESSED", "processed_comments")])
+
     print("Đang lắng nghe Kafka...")
     try:
         while True:
@@ -63,7 +66,7 @@ if __name__ == '__main__':
             if msg.error():
                 print(f"Kafka Error: {msg.error()}")
                 continue
-            
+
             try:
                 # Đọc chuỗi JSON phẳng và ghi xuống nhiều bảng
                 data = json.loads(msg.value().decode('utf-8'))
@@ -71,7 +74,7 @@ if __name__ == '__main__':
             except Exception as e:
                 print(f"Lỗi DB: {e}")
                 conn.rollback()
-                
+
     except KeyboardInterrupt:
         pass
     finally:

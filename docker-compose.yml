@@ -32,6 +32,7 @@ services:
       - "8081:8081"
     command: jobmanager
     depends_on: [kafka]
+    env_file: .env
     environment:
       - JOB_MANAGER_RPC_ADDRESS=jobmanager
     volumes:
@@ -42,17 +43,19 @@ services:
     networks: [flink-net]
     depends_on: [jobmanager]
     command: taskmanager
+    env_file: .env
     environment:
       - JOB_MANAGER_RPC_ADDRESS=jobmanager
+
   postgres:
     image: postgres:15
     networks: [flink-net]
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: abc
-      POSTGRES_DB: sentiment_db
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
     volumes:
       - pg-data:/var/lib/postgresql/data
 

@@ -42,3 +42,6 @@ bin/
 .DS_Store
 .env
 venv/
+
+## Raw Data ##
+data_ingestion/raw_data/

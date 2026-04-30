@@ -1,20 +1,24 @@
 import json
+import os
 from time import time
+from dotenv import load_dotenv
 from transformers import pipeline, AutoTokenizer
 from kafka import KafkaConsumer, KafkaProducer
 
-# ====== CONFIG ======
-KAFKA_TOPIC = "processed_comments"
-OUTPUT_TOPIC = "final_comments"
-KAFKA_BOOTSTRAP = "localhost:29092"
-GROUP_ID = "roberta-sentiment-group"
-BATCH_SIZE = 16
+load_dotenv()
 
-FLUSH_INTERVAL = 2  # giây
+# ====== CONFIG ======
+KAFKA_TOPIC = os.getenv("KAFKA_TOPIC_PROCESSED", "processed_comments")
+OUTPUT_TOPIC = os.getenv("KAFKA_TOPIC_OUTPUT", "final_comments")
+KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:29092")
+GROUP_ID = os.getenv("KAFKA_GROUP_MODEL", "roberta-sentiment-group")
+BATCH_SIZE = int(os.getenv("MODEL_BATCH_SIZE", 16))
+FLUSH_INTERVAL = int(os.getenv("MODEL_FLUSH_INTERVAL", 2))
+
 last_flush = time()
 
-MODEL_NAME = "cardiffnlp/twitter-roberta-base-sentiment"
-MODEL_VERSION = "1.0"
+MODEL_NAME = os.getenv("MODEL_NAME", "cardiffnlp/twitter-roberta-base-sentiment")
+MODEL_VERSION = os.getenv("MODEL_VERSION", "1.0")
 
 # ====== LOAD MODEL ======
 # Load tokenizer riêng để kiểm soát tốt hơn
@@ -23,7 +27,7 @@ tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 classifier = pipeline(
     "sentiment-analysis",
     model=MODEL_NAME,
-    tokenizer=tokenizer,      
+    tokenizer=tokenizer,
     truncation=True,        # Kích hoạt cắt tỉa
     max_length=512          # Giới hạn tối đa của RoBERTa
 )
