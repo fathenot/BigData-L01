@@ -45,3 +45,14 @@ venv/
 
 ## Raw Data ##
 data_ingestion/raw_data/
+
+### Node.js ###
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+
+### Frontend build ###
+frontend/dist/
+frontend/.vite/

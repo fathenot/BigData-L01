@@ -1,6 +1,6 @@
 # Real-time Sentiment Analysis Data Pipeline
 
-Hệ thống xử lý luồng dữ liệu thời gian thực, phân tích cảm xúc (Sentiment Analysis) từ các đánh giá sản phẩm Amazon. Sử dụng Apache Kafka, Apache Flink, RoBERTa ML model và PostgreSQL.
+Hệ thống xử lý luồng dữ liệu thời gian thực, phân tích cảm xúc (Sentiment Analysis) từ các đánh giá sản phẩm Amazon. Sử dụng Apache Kafka, Apache Flink, RoBERTa ML model, PostgreSQL và Dashboard React.
 
 ## Kiến trúc hệ thống
 
@@ -26,6 +26,12 @@ producer.py  ──►  Kafka: social_media_stream
                         │
                         ▼
               worker.py  ──►  PostgreSQL
+                                   │
+                                   ▼
+                          BFF (Express :3001)
+                                   │
+                                   ▼
+                       Dashboard (React :5173)
 ```
 
 ---
@@ -34,30 +40,59 @@ producer.py  ──►  Kafka: social_media_stream
 
 - **Docker & Docker Compose** — chạy Kafka, Zookeeper, Flink, PostgreSQL
 - **Java 11** — chỉ cần nếu muốn build lại JAR (không bắt buộc, đã có sẵn `jobs/Pipeline.jar`)
-- **Python 3.8+** — chạy Producer, Model, Worker, API
-- **DBeaver** hoặc `psql` — để khởi tạo schema và kiểm tra dữ liệu
+- **Python 3.8+** — chạy Producer, Model, Worker
+- **Node.js 18+ (native WSL/Linux)** — chạy BFF và Frontend
+- **DBeaver** hoặc `psql` — để khởi tạo schema
+
+> **Lưu ý WSL:** Cài Node.js bằng `nvm` bên trong WSL, không dùng Node.js từ Windows.
+> ```bash
+> curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+> source ~/.bashrc && nvm install --lts
+> ```
 
 ---
 
-## Hướng dẫn chạy pipeline
+## Cấu trúc thư mục
+
+```
+BigData-L01/
+├── src/main/java/org/example/   # Apache Flink (Java)
+├── data_ingestion/              # Python: Producer, Worker, API
+│   ├── producer.py              # Đọc raw_data/ → Kafka
+│   ├── worker.py                # Kafka(final_comments) → PostgreSQL
+│   ├── api_server.py            # FastAPI (port 8000)
+│   ├── data.py                  # Đọc & multiplex CSV/JSON
+│   └── raw_data/                # File dữ liệu thô (gitignored)
+├── model/
+│   └── model.py                 # RoBERTa sentiment → Kafka
+├── bff/                         # Express.js BFF (port 3001)
+│   ├── index.js
+│   ├── db.js
+│   └── routes/                  # products, overview, trend, reviews
+├── frontend/                    # React + Vite Dashboard (port 5173)
+│   └── src/
+│       ├── App.jsx
+│       ├── api/index.js
+│       └── components/          # FilterBar, OverviewCards, Charts, Table
+├── database/
+│   └── schema.sql               # 5 bảng PostgreSQL + MLModel seed
+├── jobs/
+│   └── Pipeline.jar             # Flink JAR đã build sẵn
+├── docker-compose.yml
+└── .env                         # Config (gitignored, copy từ .env.example)
+```
+
+---
+
+## Hướng dẫn chạy
 
 ### Bước 1 — Cấu hình môi trường
-
-Sao chép file cấu hình mẫu và điền thông tin phù hợp:
 
 ```bash
 cp .env.example .env
 ```
 
-Mở `.env` và chỉnh các giá trị nếu cần (mặc định đã hoạt động với `docker-compose.yml`):
-
-```env
-DB_HOST=localhost
-DB_PORT=5432        # hoặc 5433 nếu port 5432 đã bị chiếm
-DB_NAME=sentiment_db
-DB_USER=postgres    # hoặc admin — tuỳ cấu hình Docker của bạn
-DB_PASSWORD=password
-```
+Chỉnh `.env` theo cấu hình local của bạn (DB host, port, user, password).
 
 ---
 
@@ -67,44 +102,30 @@ DB_PASSWORD=password
 docker-compose up -d
 ```
 
-Chờ khoảng 15–20 giây để tất cả service sẵn sàng. Kiểm tra:
-
-```bash
-docker-compose ps
-```
-
-Tất cả service phải ở trạng thái `Up`:
-
 | Service | Port |
 |---------|------|
 | Zookeeper | 2181 |
-| Kafka | 9092 (Docker nội bộ), 29092 (host) |
+| Kafka | 29092 (host) |
 | Flink JobManager | 8081 |
-| PostgreSQL | 5432 |
+| PostgreSQL | 5433 |
 
 ---
 
 ### Bước 3 — Khởi tạo Database
 
-Dùng DBeaver hoặc `psql` kết nối vào PostgreSQL với thông tin trong `.env`, sau đó chạy:
-
 ```bash
-# Dùng psql (thay thông tin theo .env)
-psql -h localhost -p 5432 -U postgres -d sentiment_db -f database/schema.sql
+psql -h localhost -p 5433 -U postgres -d postgres -f database/schema.sql
 ```
 
-Script sẽ tạo 5 bảng (`StreamTopic`, `Product`, `AmazonReview`, `MLModel`, `SentimentResult`) và thêm seed data bắt buộc cho bảng `MLModel`.
+Script tạo 5 bảng và thêm seed row bắt buộc cho bảng `MLModel`.
 
 ---
 
 ### Bước 4 — Thiết lập Python
 
 ```bash
-# Tạo và kích hoạt môi trường ảo
 python3 -m venv venv
-source venv/bin/activate        # Windows: venv\Scripts\activate
-
-# Cài thư viện
+source venv/bin/activate
 pip install -r data_ingestion/requirements.txt
 pip install kafka-python transformers torch fastapi uvicorn pydantic
 ```
@@ -113,15 +134,11 @@ pip install kafka-python transformers torch fastapi uvicorn pydantic
 
 ### Bước 5 — Submit Flink Job
 
-Mở trình duyệt tại **http://localhost:8081** (Flink Dashboard):
+Mở `http://localhost:8081` → **Submit New Job** → upload `jobs/Pipeline.jar` → Submit.
 
-1. Chọn **Submit New Job** → **+ Add New**
-2. Upload file `jobs/Pipeline.jar`
-3. Nhấn **Submit**
+Flink tự tạo các Kafka topic cần thiết và lắng nghe data.
 
-Flink sẽ tự động tạo các Kafka topic cần thiết (`social_media_stream`, `processed_comments`, `sentiment-input`) và bắt đầu lắng nghe dữ liệu.
-
-> **Lưu ý:** Nếu muốn build lại JAR sau khi sửa Java code:
+> Rebuild JAR sau khi sửa Java code:
 > ```bash
 > ./gradlew shadowJar
 > # Output: build/libs/BigData-L01-1.0-SNAPSHOT-all.jar
@@ -129,89 +146,74 @@ Flink sẽ tự động tạo các Kafka topic cần thiết (`social_media_stre
 
 ---
 
-### Bước 6 — Khởi chạy Worker (lưu DB)
+### Bước 6 — Chạy pipeline Python
 
-Mở terminal mới, kích hoạt venv, chạy:
-
-```bash
-python data_ingestion/worker.py
-```
-
-Worker sẽ lắng nghe topic `final_comments` và ghi kết quả vào PostgreSQL.
-
----
-
-### Bước 7 — Khởi chạy Model (phân tích sentiment)
-
-Mở terminal mới, kích hoạt venv, chạy:
+Mở 3 terminal riêng, mỗi terminal kích hoạt `venv`:
 
 ```bash
+# Terminal 1 — Model (chạy trước, đợi tải model ~500MB lần đầu)
 python model/model.py
-```
 
-Lần đầu chạy sẽ tự tải model RoBERTa (~500MB). Model đọc từ `processed_comments`, phân tích cảm xúc và đẩy kết quả vào `final_comments`.
+# Terminal 2 — Worker
+python data_ingestion/worker.py
 
----
-
-### Bước 8 — Bơm dữ liệu
-
-Mở terminal mới, kích hoạt venv, chạy:
-
-```bash
+# Terminal 3 — Producer (sau khi model đã ready)
 python data_ingestion/producer.py
 ```
 
-Producer đọc các file trong `data_ingestion/raw_data/` và đẩy dữ liệu vào Kafka.
+---
 
-> **File dữ liệu có sẵn:** `Cell_Phones_and_Accessories_5.json`
-> Producer cũng hỗ trợ: `sentiment140.csv`, `train.csv`, `amazon_reviews.csv` (cần thêm thủ công vào `raw_data/`)
+### Bước 7 — Khởi động BFF và Dashboard
+
+```bash
+# Terminal 4 — BFF (Express)
+cd bff
+npm install      # lần đầu
+node index.js    # chạy tại localhost:3001
+
+# Terminal 5 — Frontend (React)
+cd frontend
+npm install      # lần đầu
+npm run dev      # chạy tại localhost:5173
+```
+
+Mở `http://localhost:5173` để xem Dashboard.
 
 ---
 
-### Kiểm tra kết quả
+## Dashboard
 
-Theo dõi log của từng terminal. Khi pipeline hoạt động đúng:
-
-- **Worker** in: `✅ Saved review abc12345... | positive (0.92)`
-- **Model** in: output JSON của từng batch
-
-Kiểm tra dữ liệu trong database:
-
-```sql
-SELECT COUNT(*) FROM SentimentResult;
-SELECT sentiment_label, COUNT(*) FROM SentimentResult GROUP BY sentiment_label;
-```
-
-API endpoint kiểm tra: `http://localhost:8000/analytics/product-sentiment`
+| Tính năng | Mô tả |
+|-----------|-------|
+| Filter ngày | Hôm nay / 3 ngày / 1 tuần / 1 tháng |
+| Filter sản phẩm | Dropdown chọn ASIN |
+| Overview cards | Total Reviews, Avg Confidence, % Positive/Negative |
+| Pie chart | Phân bổ 3 nhãn sentiment |
+| Bar chart | Xu hướng review theo ngày |
+| Review Table | Bảng chi tiết, click để xem full text |
+| Filter tiêu cực | Toggle chỉ xem các review Negative |
+| Auto-refresh | Bảng tự cập nhật mỗi 10 giây |
 
 ---
 
 ## Xử lý lỗi thường gặp
 
 ### Kafka: `No resolvable bootstrap urls`
+- Đảm bảo Docker đang chạy
+- `.env`: `KAFKA_BOOTSTRAP_SERVERS=localhost:29092`
+- macOS: dùng `127.0.0.1:29092`
 
-Python scripts dùng `localhost:29092`. Nếu gặp lỗi này:
-- Đảm bảo Docker đang chạy (`docker-compose ps`)
-- Đảm bảo `.env` có `KAFKA_BOOTSTRAP_SERVERS=localhost:29092`
-- Trên macOS: dùng `127.0.0.1:29092` thay vì `localhost:29092`
-
-### Kafka: Topic đã tồn tại nhưng Flink vẫn lỗi (Cache Volume)
-
+### Kafka: topic lỗi / cache cũ
 ```bash
-docker-compose down -v    # xóa sạch volumes
-docker-compose up -d
+docker-compose down -v && docker-compose up -d
 ```
 
-### Database: `FK violation` khi insert SentimentResult
-
-Bảng `MLModel` chưa có seed data. Chạy lại `database/schema.sql` hoặc insert thủ công:
-
+### Database: FK violation khi insert SentimentResult
 ```sql
 INSERT INTO public.mlmodel (model_version_id, algorithm_name)
 VALUES ('svm-v1.0', 'RoBERTa (cardiffnlp/twitter-roberta-base-sentiment)')
 ON CONFLICT DO NOTHING;
 ```
 
-### Database: Connection refused
-
-Kiểm tra port và credentials trong `.env` khớp với `docker-compose.yml`. PostgreSQL mặc định chạy ở port `5432`.
+### npm install lỗi UNC path (WSL)
+Node.js đang chạy từ Windows. Cài Node.js native trong WSL bằng `nvm` (xem Yêu cầu hệ thống).
