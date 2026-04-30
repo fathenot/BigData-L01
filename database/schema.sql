@@ -69,3 +69,8 @@ CREATE INDEX idx_sentiment_processed_time ON public.sentimentresult USING btree 
 
 ALTER TABLE public.sentimentresult OWNER TO "admin";
 GRANT ALL ON TABLE public.sentimentresult TO "admin";
+
+-- Seed: MLModel row required by SentimentResult FK constraint
+INSERT INTO public.mlmodel (model_version_id, algorithm_name)
+VALUES ('svm-v1.0', 'RoBERTa (cardiffnlp/twitter-roberta-base-sentiment)')
+ON CONFLICT DO NOTHING;

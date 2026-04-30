@@ -89,7 +89,9 @@ def get_file_generator(file_path, config, topic_tag):
                     yield {"timestamp": int(time.time()), "textComment": clean_text, "topic": topic_tag, "label": label}
                 except json.JSONDecodeError: continue
 
-def stream_multisource_data(folder_path='./raw_data'):
+def stream_multisource_data(folder_path=None):
+    if folder_path is None:
+        folder_path = os.path.join(os.path.dirname(__file__), 'raw_data')
     
     all_files = [f for f in os.listdir(folder_path) if f in FILE_CONFIGS]
     
