@@ -39,9 +39,11 @@ producer.py  ──►  Kafka: social_media_stream
 ## Yêu cầu hệ thống
 
 - **Docker & Docker Compose** — chạy Kafka, Zookeeper, Flink, PostgreSQL
-- **Java 11** — chỉ cần nếu muốn build lại JAR (không bắt buộc, đã có sẵn `jobs/Pipeline.jar`)
+- **Java 11** — Dùng để chạy flink và  build lại JAR (không bắt buộc, đã có sẵn `jobs/Pipeline.jar`)
 - **Python 3.8+** — chạy Producer, Model, Worker
 - **Node.js 18+ (native WSL/Linux)** — chạy BFF và Frontend
+- **Hệ điều hành** Khuyến nghị sử dụng Linux hoặc các hệ điều hành dựa trên Unix
+
 
 > **Lưu ý WSL:** Cài Node.js bằng `nvm` bên trong WSL, không dùng Node.js từ Windows.
 > ```bash
