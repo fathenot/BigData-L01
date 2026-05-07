@@ -5,8 +5,10 @@ const router  = express.Router();
 const INTERVALS = { '1d': '1 day', '3d': '3 days', '7d': '7 days', '30d': '30 days' };
 
 router.get('/', async (req, res) => {
-  const interval    = INTERVALS[req.query.dateRange] || '7 days';
-  const productAsin = req.query.productAsin || null;
+  const interval      = INTERVALS[req.query.dateRange] || '7 days';
+  const productAsin   = req.query.productAsin  || null;
+  const confidenceMin = req.query.confidenceMin != null && req.query.confidenceMin !== '' ? parseFloat(req.query.confidenceMin) : null;
+  const confidenceMax = req.query.confidenceMax != null && req.query.confidenceMax !== '' ? parseFloat(req.query.confidenceMax) : null;
 
   try {
     const { rows } = await pool.query(
@@ -19,8 +21,10 @@ router.get('/', async (req, res) => {
        FROM sentimentresult sr
        JOIN amazonreview ar ON sr.review_id = ar.review_id
        WHERE ar.event_time >= NOW() - $1::interval
-         AND ($2::text IS NULL OR ar.product_asin = $2)`,
-      [interval, productAsin]
+         AND ($2::text    IS NULL OR ar.product_asin      =  $2)
+         AND ($3::numeric IS NULL OR sr.confidence_score >= $3)
+         AND ($4::numeric IS NULL OR sr.confidence_score <= $4)`,
+      [interval, productAsin, confidenceMin, confidenceMax]
     );
     const row   = rows[0];
     const total = parseInt(row.total_reviews) || 0;

@@ -5,7 +5,13 @@ function Stars({ n }) {
   return <span title={`${n} sao`}>{'★'.repeat(n)}{'☆'.repeat(5 - n)}</span>;
 }
 
-export default function ReviewTable({ reviews, total, page, setPage, onlyNegative, setOnlyNegative }) {
+const CONFIDENCE_OPTIONS = [
+  { label: '70–80%',  value: '70-80'  },
+  { label: '80–90%',  value: '80-90'  },
+  { label: '90–100%', value: '90-100' },
+];
+
+export default function ReviewTable({ reviews, total, page, setPage, onlyNegative, setOnlyNegative, confidenceRange, setConfidenceRange }) {
   const [expanded, setExpanded] = useState(null);
   const LIMIT = 50;
 
@@ -22,12 +28,24 @@ export default function ReviewTable({ reviews, total, page, setPage, onlyNegativ
             ({total?.toLocaleString()} kết quả)
           </span>
         </span>
-        <button
-          className={`btn-outline ${onlyNegative ? 'active' : ''}`}
-          onClick={() => setOnlyNegative(!onlyNegative)}
-        >
-          {onlyNegative ? '✕ Bỏ lọc tiêu cực' : '⚠ Chỉ xem Tiêu cực'}
-        </button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <span style={{ fontSize: '0.8rem', color: '#64748b' }}>Độ tin cậy:</span>
+          {CONFIDENCE_OPTIONS.map(opt => (
+            <button
+              key={opt.value}
+              className={`btn-outline ${confidenceRange === opt.value ? 'active' : ''}`}
+              onClick={() => setConfidenceRange(confidenceRange === opt.value ? null : opt.value)}
+            >
+              {opt.label}
+            </button>
+          ))}
+          <button
+            className={`btn-outline ${onlyNegative ? 'active' : ''}`}
+            onClick={() => setOnlyNegative(!onlyNegative)}
+          >
+            {onlyNegative ? '✕ Bỏ lọc tiêu cực' : '⚠ Chỉ xem Tiêu cực'}
+          </button>
+        </div>
       </div>
 
       <div className="table-wrap">
