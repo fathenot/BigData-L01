@@ -1,0 +1,67 @@
+\section{Hướng phát triển}
+
+Hệ thống hiện tại đã chứng minh tính khả thi của pipeline phân tích cảm xúc theo thời gian thực. Tuy nhiên, để triển khai ở quy mô sản xuất thực tế, còn nhiều hướng cải tiến đáng được nghiên cứu thêm.
+
+\subsection{Mở rộng quy mô (Horizontal Scaling)}
+
+Kiến trúc hiện tại chạy trên một máy duy nhất (single node). Để xử lý hàng triệu review mỗi giờ, hệ thống cần được mở rộng theo chiều ngang:
+
+\begin{itemize}
+    \item \textbf{Kafka cluster}: Tăng số lượng broker và partition để tăng thông lượng. Mỗi partition có thể được xử lý song song bởi một consumer khác nhau, giúp giảm độ trễ tổng thể tuyến tính theo số máy.
+    \item \textbf{Flink cluster}: Thêm nhiều TaskManager để tăng degree of parallelism. Flink hỗ trợ auto-scaling với Kubernetes operator, tự động thêm/bớt worker theo tải.
+    \item \textbf{Model inference}: Triển khai nhiều instance \texttt{model.py} chạy song song, mỗi instance đọc từ một partition Kafka riêng. Kết hợp với GPU cluster (NVIDIA Triton Inference Server) để tăng tốc inference RoBERTa lên 10--100x so với CPU.
+    \item \textbf{PostgreSQL}: Chuyển sang giải pháp phân tán như CockroachDB hoặc dùng read replica để tách tải đọc/ghi.
+\end{itemize}
+
+\subsection{Tích hợp nguồn dữ liệu thực}
+
+Hiện tại hệ thống đọc từ file tĩnh trong \texttt{raw\_data/}. Để phân tích dữ liệu thực, cần tích hợp với các API chính thức:
+
+\begin{itemize}
+    \item \textbf{Amazon Product Advertising API / SP-API}: Lấy review sản phẩm theo thời gian thực từ Amazon Marketplace. API cung cấp webhook khi có review mới, loại bỏ cần polling.
+    \item \textbf{Meta Graph API (Facebook/Instagram)}: Thu thập comment, post công khai về sản phẩm từ fanpage doanh nghiệp. Cần xử lý OAuth 2.0 và tuân thủ chính sách dữ liệu của Meta.
+    \item \textbf{Twitter/X API v2}: Theo dõi mention, hashtag liên quan đến thương hiệu theo thời gian thực qua Filtered Stream endpoint.
+    \item \textbf{Google Play / App Store Reviews}: Sử dụng các thư viện scraping hoặc API không chính thức để thu thập review ứng dụng di động.
+\end{itemize}
+
+Mỗi nguồn dữ liệu cần một connector riêng biệt nhưng đều hướng tới cùng một Kafka topic, giúp pipeline downstream không thay đổi.
+
+\subsection{Cải thiện hiển thị — Line Chart theo thời gian thực}
+
+Dashboard hiện tại dùng biểu đồ cột (bar chart) theo ngày. Để theo dõi xu hướng tức thời, cần cải tiến:
+
+\begin{itemize}
+    \item \textbf{Line chart theo giây/phút}: Hiển thị 3 đường positive/neutral/negative trên trục thời gian rolling window (ví dụ 5 phút gần nhất). Thách thức kỹ thuật là group-by theo giây cần endpoint riêng với query dạng \texttt{date\_trunc('second', event\_time)}.
+    \item \textbf{WebSocket thay polling}: Thay cơ chế auto-refresh 5 giây bằng WebSocket (Socket.io) để BFF push dữ liệu ngay khi có review mới, giảm độ trễ hiển thị xuống dưới 1 giây.
+    \item \textbf{Sliding window}: Dùng Flink windowing (tumbling/sliding window) để tính aggregate liên tục, BFF chỉ cần đọc từ bảng aggregate thay vì tính toán trên toàn bộ raw data.
+\end{itemize}
+
+\subsection{Sửa lỗi và chuẩn hóa thời gian}
+
+Hệ thống hiện tại có một số vấn đề liên quan đến timestamp:
+
+\begin{itemize}
+    \item \textbf{Timezone inconsistency}: Timestamp từ dataset Amazon được lưu theo UTC nhưng dashboard hiển thị theo múi giờ local của trình duyệt, gây nhầm lẫn. Cần chuẩn hóa toàn bộ pipeline về UTC và chuyển đổi tại frontend.
+    \item \textbf{Event time vs Processing time}: Flink hiện dùng processing time (thời điểm message đến Flink). Nên chuyển sang event time (thời điểm review được viết) để phân tích xu hướng chính xác hơn, cần xử lý out-of-order events bằng watermark.
+    \item \textbf{Fake timestamp}: Producer hiện dùng thời gian hiện tại (\texttt{datetime.now()}) thay vì thời gian gốc của review. Cần đọc trường \texttt{unixReviewTime} từ dataset Amazon và truyền qua toàn bộ pipeline.
+\end{itemize}
+
+\subsection{Dự báo xu hướng bằng AI}
+
+Bổ sung lớp dự báo (forecasting) dựa trên lịch sử sentiment:
+
+\begin{itemize}
+    \item \textbf{Time-series forecasting}: Dùng mô hình LSTM hoặc Prophet (Facebook) để dự báo tỉ lệ negative trong 1--24 giờ tiếp theo dựa trên dữ liệu lịch sử. Dashboard có thể hiển thị vùng dự báo (confidence interval) trên line chart.
+    \item \textbf{Anomaly detection}: Phát hiện bất thường khi tỉ lệ negative tăng đột biến (ví dụ do lỗi sản phẩm hoặc scandal) và gửi cảnh báo qua email/Slack.
+    \item \textbf{Topic modeling}: Kết hợp LDA (Latent Dirichlet Allocation) để tự động nhóm các review negative theo chủ đề (giao hàng chậm, sản phẩm lỗi, dịch vụ kém...) giúp doanh nghiệp xác định vấn đề cụ thể cần giải quyết.
+    \item \textbf{Multilingual support}: Mở rộng sang các mô hình đa ngôn ngữ như \texttt{xlm-roberta-base} để hỗ trợ phân tích review tiếng Việt và các ngôn ngữ khác ngoài tiếng Anh.
+\end{itemize}
+
+\subsection{Tăng cường bảo mật và vận hành}
+
+\begin{itemize}
+    \item \textbf{Authentication}: Thêm JWT authentication cho BFF API, ngăn truy cập trái phép vào dữ liệu nhạy cảm.
+    \item \textbf{Monitoring}: Tích hợp Prometheus + Grafana để theo dõi throughput Kafka, latency Flink, và resource usage của model.
+    \item \textbf{CI/CD}: Tự động hóa build, test, và deploy bằng GitHub Actions. Mỗi lần cập nhật model, pipeline tự động rebuild container và deploy không downtime (rolling update).
+    \item \textbf{Data retention}: Định nghĩa chính sách xóa dữ liệu cũ (ví dụ giữ tối đa 90 ngày) để tránh PostgreSQL phình to theo thời gian.
+\end{itemize}
