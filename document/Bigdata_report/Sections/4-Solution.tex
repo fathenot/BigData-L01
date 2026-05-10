@@ -1,0 +1,151 @@
+\section{Giải pháp và triển khai}
+
+\subsection{Môi trường và công cụ}
+
+\subsubsection{Hạ tầng}
+
+Toàn bộ hạ tầng được container hóa bằng Docker Compose, bao gồm:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|l|l|l|}
+\hline
+\textbf{Service} & \textbf{Image} & \textbf{Port} \\
+\hline
+Zookeeper & confluentinc/cp-zookeeper:7.4.0 & 2181 \\
+\hline
+Kafka & confluentinc/cp-kafka:7.4.0 & 29092 (host), 9092 (internal) \\
+\hline
+Flink JobManager & flink:1.17-scala\_2.12 & 8081 \\
+\hline
+Flink TaskManager & flink:1.17-scala\_2.12 & --- \\
+\hline
+PostgreSQL & postgres:15 & 5432 \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsubsection{Công cụ phát triển}
+
+\begin{itemize}
+    \item \textbf{Python 3.10+}: Data ingestion, sentiment model (pip packages: kafka-python, transformers, torch, psycopg2, fastapi)
+    \item \textbf{Java 11 / Gradle}: Apache Flink job (shadowJar để đóng gói fat JAR)
+    \item \textbf{Node.js 18+}: BFF Express.js (express, pg, cors, dotenv)
+    \item \textbf{React 18 + Vite}: Frontend dashboard (axios, recharts)
+\end{itemize}
+
+\subsection{Data Ingestion}
+
+\subsubsection{Producer}
+
+Script \texttt{data\_ingestion/producer.py} đọc dữ liệu từ các file trong \texttt{raw\_data/} và đẩy vào Kafka:
+\begin{itemize}
+    \item Hỗ trợ nhiều định dạng file: JSON (Amazon reviews), CSV (sentiment140, train)
+    \item Multiplexing round-robin ngẫu nhiên giữa các file để tạo luồng đa dạng
+    \item Serialize mỗi record thành JSON trước khi publish vào topic \texttt{social\_media\_stream}
+    \item Kết nối Kafka qua \texttt{localhost:29092} (host network)
+\end{itemize}
+
+\subsubsection{Worker}
+
+Script \texttt{data\_ingestion/worker.py} đọc từ topic \texttt{final\_comments} và lưu vào PostgreSQL:
+\begin{itemize}
+    \item Consumer group riêng biệt để không ảnh hưởng model
+    \item Insert vào bảng \texttt{AmazonReview} và \texttt{SentimentResult} trong cùng transaction
+    \item Kiểm tra FK constraint với bảng \texttt{MLModel} (seed row phải tồn tại trước)
+    \item Xử lý duplicate bằng \texttt{ON CONFLICT DO NOTHING} theo review\_id
+\end{itemize}
+
+\subsection{Xử lý luồng với Apache Flink}
+
+Flink job được đóng gói thành fat JAR và submit qua Flink Dashboard (\texttt{http://localhost:8081}):
+
+\begin{enumerate}
+    \item \textbf{Source}: \texttt{KafkaSource<String>} đọc từ topic \texttt{social\_media\_stream}
+    \item \textbf{Deserialization}: Parse JSON thành \texttt{SocialMediaComment} (timestamp, textComment, topic, label)
+    \item \textbf{Map transformation}: Hàm \texttt{cleanText()} áp dụng regex:
+        \begin{itemize}
+            \item Loại URL: \texttt{https?://\textbackslash S+}
+            \item Loại @mention: \texttt{@\textbackslash w+}
+            \item Loại \#hashtag: \texttt{\#\textbackslash w+}
+            \item Chuẩn hóa khoảng trắng
+        \end{itemize}
+    \item \textbf{Sink}: \texttt{KafkaSink<String>} ghi vào topic \texttt{processed\_comments}
+\end{enumerate}
+
+Hai địa chỉ Kafka được dùng: \texttt{kafka:9092} cho Flink (Docker network) và \texttt{localhost:29092} cho Python scripts (host).
+
+\subsection{Phân tích cảm xúc}
+
+Script \texttt{model/model.py} chạy liên tục như một Kafka consumer-producer:
+
+\begin{enumerate}
+    \item Khởi tạo \texttt{AutoModelForSequenceClassification} và \texttt{AutoTokenizer} từ checkpoint \texttt{cardiffnlp/twitter-roberta-base-sentiment}
+    \item Lắng nghe topic \texttt{processed\_comments} (consumer group: \texttt{sentiment-group})
+    \item Với mỗi message: tokenize → inference → softmax → lấy label và confidence
+    \item Đóng gói kết quả cùng metadata gốc (asin, star\_rating, event\_time) thành JSON
+    \item Publish vào topic \texttt{final\_comments}
+\end{enumerate}
+
+Để phát hiện crash sớm trong quá trình khởi động, script \texttt{start-demo.sh} dùng vòng lặp kiểm tra log file cho tín hiệu \texttt{"consumer started"} với timeout và crash detection.
+
+\subsection{BFF và Dashboard}
+
+\subsubsection{Backend For Frontend (BFF)}
+
+Express.js BFF tại port 3001 đóng vai trò trung gian giữa React và PostgreSQL:
+\begin{itemize}
+    \item Parameterized queries ngăn chặn SQL injection
+    \item Filter confidence score server-side (không lọc phía client)
+    \item CORS enabled để frontend dev server có thể gọi API
+    \item Proxy trong \texttt{vite.config.js}: \texttt{/api} → \texttt{http://localhost:3001}
+\end{itemize}
+
+\subsubsection{Dashboard React}
+
+Giao diện được xây dựng bằng React 18 + Vite, sử dụng Recharts cho biểu đồ:
+
+\begin{itemize}
+    \item \textbf{FilterBar}: Chọn khoảng thời gian (1d/3d/7d/30d) và lọc theo ASIN sản phẩm
+    \item \textbf{OverviewCards}: 4 thẻ thống kê — tổng review, độ tin cậy trung bình, \% positive/neutral/negative
+    \item \textbf{SentimentPieChart}: Biểu đồ tròn 3 phần với nhãn phần trăm
+    \item \textbf{TrendChart}: Biểu đồ cột xu hướng theo ngày (positive/neutral/negative)
+    \item \textbf{ReviewTable}: Bảng 50 review/trang với filter "Chỉ xem Tiêu cực" và filter độ tin cậy (70–80\%, 80–90\%, 90–100\%)
+\end{itemize}
+
+Auto-refresh 5 giây để cập nhật dữ liệu theo thời gian thực.
+
+\subsubsection{Confidence Filter}
+
+Filter độ tin cậy được truyền từ frontend xuống BFF dưới dạng \texttt{confidenceMin}/\texttt{confidenceMax}, áp dụng vào cả endpoint \texttt{/overview} (cập nhật pie chart) lẫn \texttt{/reviews} (cập nhật bảng):
+
+\begin{verbatim}
+AND ($3::numeric IS NULL OR sr.confidence_score >= $3)
+AND ($4::numeric IS NULL OR sr.confidence_score <= $4)
+\end{verbatim}
+
+\subsection{Kết quả demo}
+
+\subsubsection{Khởi động hệ thống}
+
+Script \texttt{start-demo.sh} tự động hóa toàn bộ quy trình:
+\begin{enumerate}
+    \item Khởi động Docker Compose (Kafka, Flink, PostgreSQL)
+    \item Chờ Kafka sẵn sàng và tạo các topic cần thiết
+    \item Submit Flink job qua REST API
+    \item Khởi động \texttt{model.py} và chờ consumer sẵn sàng
+    \item Khởi động \texttt{producer.py} và \texttt{worker.py}
+    \item Khởi động BFF và Frontend dev server
+\end{enumerate}
+
+\subsubsection{Kết quả}
+
+[Thêm screenshots dashboard tại đây]
+
+Dashboard hiển thị:
+\begin{itemize}
+    \item Số lượng review theo thời gian thực tăng dần
+    \item Phân bố cảm xúc: positive chiếm đa số với các review Amazon (sản phẩm điện thoại/phụ kiện)
+    \item Bảng review cho phép click vào từng row để xem nội dung đầy đủ
+    \item Filter confidence giúp tập trung vào các dự đoán có độ tin cậy cao
+\end{itemize}

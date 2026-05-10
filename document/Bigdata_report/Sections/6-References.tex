@@ -1,0 +1,53 @@
+\section*{Tài nguyên và Mã nguồn}
+\addcontentsline{toc}{section}{Tài nguyên và Mã nguồn}
+
+\subsection*{GitHub Repository}
+
+Toàn bộ mã nguồn của đồ án được lưu trữ công khai tại:
+
+\begin{center}
+\large
+\href{https://github.com/[your-username]/BigData-L01}{\texttt{https://github.com/[your-username]/BigData-L01}}
+\end{center}
+
+Repository bao gồm:
+
+\begin{itemize}
+    \item \texttt{data\_ingestion/} — Producer, worker, và API server
+    \item \texttt{model/} — RoBERTa sentiment analysis pipeline
+    \item \texttt{bff/} — Express.js Backend For Frontend
+    \item \texttt{frontend/} — React dashboard (Vite + Recharts)
+    \item \texttt{src/} — Apache Flink job (Java)
+    \item \texttt{database/} — Schema SQL và migration scripts
+    \item \texttt{docker-compose.yml} — Toàn bộ hạ tầng container
+    \item \texttt{start-demo.sh} / \texttt{stop-demo.sh} — Script khởi động/dừng tự động
+    \item \texttt{document/} — Báo cáo LaTeX (file này)
+\end{itemize}
+
+\subsection*{Hướng dẫn chạy}
+
+\begin{verbatim}
+# Clone repository
+git clone https://github.com/[your-username]/BigData-L01.git
+cd BigData-L01
+
+# Khởi động toàn bộ pipeline
+bash start-demo.sh
+
+# Truy cập dashboard
+# http://localhost:5173
+
+# Dừng hệ thống
+bash stop-demo.sh
+\end{verbatim}
+
+\subsection*{Tài liệu tham khảo}
+
+\begin{enumerate}
+    \item Y. Liu et al., ``RoBERTa: A Robustly Optimized BERT Pretraining Approach,'' \textit{arXiv:1907.11692}, 2019.
+    \item F. Barbieri et al., ``TweetEval: Unified Benchmark and Comparative Evaluation for Tweet Classification,'' \textit{EMNLP Findings}, 2020. (cardiffnlp/twitter-roberta-base-sentiment)
+    \item Apache Software Foundation, ``Apache Flink --- Stateful Computations over Data Streams,'' \url{https://flink.apache.org}, 2024.
+    \item Apache Software Foundation, ``Apache Kafka,'' \url{https://kafka.apache.org}, 2024.
+    \item Hugging Face, ``Transformers: State-of-the-art Machine Learning,'' \url{https://huggingface.co/docs/transformers}, 2024.
+    \item Ni, J. et al., ``Justifying Recommendations using Distantly-Labeled Reviews and Fine-Grained Aspects,'' \textit{EMNLP}, 2019. (Amazon review dataset)
+\end{enumerate}

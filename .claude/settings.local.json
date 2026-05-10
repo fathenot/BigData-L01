@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm create *)",
+      "Bash(cd /mnt/wsl/instances/Ubuntu/home/kiennguyen/bigdata/Assignment/BigData-L01)",
+      "Bash(wslpath \"\\\\\\\\\\\\\\\\wsl.localhost\\\\\\\\Ubuntu\\\\\\\\home\\\\\\\\kiennguyen\\\\\\\\bigdata\\\\\\\\Assignment\\\\\\\\BigData-L01\")",
+      "Bash(ls /mnt/wsl/)",
+      "PowerShell(wsl -d Ubuntu -e bash -c \"cd ~/bigdata/Assignment/BigData-L01 && npm create vite@latest frontend -- --template react 2>&1; echo 'EXIT:'$?\")",
+      "Bash(wsl -d Ubuntu -e bash -c \"chmod +x ~/bigdata/Assignment/BigData-L01/start-demo.sh ~/bigdata/Assignment/BigData-L01/stop-demo.sh && echo done\")",
+      "Bash(tree //wsl.localhost/Ubuntu/home/kiennguyen/bigdata/Assignment/BigData-L01/document -L 3)",
+      "Read(///wsl.localhost/Ubuntu/home/kiennguyen/bigdata/**)",
+      "Read(///wsl.localhost/Ubuntu/home/kiennguyen/**)"
+    ]
+  }
+}

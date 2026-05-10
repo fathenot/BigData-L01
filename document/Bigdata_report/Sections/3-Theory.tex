@@ -1,0 +1,109 @@
+\section{Cơ sở lý thuyết}
+
+\subsection{Kiến trúc tổng quan (High-level design)}
+
+Hệ thống được thiết kế theo mô hình pipeline streaming một chiều, trong đó dữ liệu chảy từ nguồn đến đích mà không cần lưu trữ trung gian lâu dài:
+
+\begin{center}
+\texttt{Producer → Kafka → Flink → Model → Kafka → Worker → PostgreSQL → BFF → Dashboard}
+\end{center}
+
+Các thành phần chính:
+
+\begin{itemize}
+    \item \textbf{Apache Kafka}: Message broker phân tán, đảm bảo thông lượng cao và độ bền dữ liệu. Hệ thống dùng 2 topic: \texttt{social\_media\_stream} (raw) và \texttt{final\_comments} (đã phân tích).
+    \item \textbf{Apache Flink}: Stream processing engine xử lý dữ liệu với độ trễ mili-giây, thực hiện tiền xử lý văn bản.
+    \item \textbf{RoBERTa Model}: Mô hình ngôn ngữ lớn thực hiện phân loại cảm xúc.
+    \item \textbf{PostgreSQL}: Lưu trữ kết quả với schema quan hệ chuẩn hóa.
+    \item \textbf{BFF + Dashboard}: Lớp API Express.js và giao diện React cung cấp khả năng trực quan hóa.
+\end{itemize}
+
+\subsection{Kiến trúc chi tiết (Low-level design)}
+
+\subsubsection{Kafka Topics và Schema}
+
+Hệ thống sử dụng 3 Kafka topic:
+
+\begin{itemize}
+    \item \texttt{social\_media\_stream}: Nhận raw review từ producer, message là JSON với các trường \texttt{text}, \texttt{timestamp}, \texttt{asin}, \texttt{star\_rating}.
+    \item \texttt{processed\_comments}: Nhận output từ Flink sau khi làm sạch văn bản.
+    \item \texttt{final\_comments}: Nhận output từ model sau khi phân tích cảm xúc, bổ sung \texttt{sentiment\_label} và \texttt{confidence\_score}.
+\end{itemize}
+
+\subsubsection{Apache Flink Job}
+
+Flink job (\texttt{Main.java}) thực hiện:
+\begin{enumerate}
+    \item Đọc từ topic \texttt{social\_media\_stream} qua \texttt{KafkaSource}
+    \item Deserialize JSON thành object \texttt{SocialMediaComment}
+    \item Làm sạch văn bản: loại bỏ URL (\texttt{http://...}), @mention, \#hashtag bằng regex
+    \item Serialize và ghi vào topic \texttt{processed\_comments} qua \texttt{KafkaSink}
+\end{enumerate}
+
+\subsubsection{Database Schema}
+
+PostgreSQL lưu trữ theo 5 bảng:
+\begin{itemize}
+    \item \textbf{AmazonReview}: Thông tin gốc (review\_id, product\_asin, star\_rating, original\_text, event\_time)
+    \item \textbf{SentimentResult}: Kết quả phân tích (review\_id FK, sentiment\_label, confidence\_score, model\_version\_id FK)
+    \item \textbf{Product}: Danh sách sản phẩm theo ASIN
+    \item \textbf{MLModel}: Thông tin phiên bản model
+    \item \textbf{StreamTopic}: Metadata về Kafka topics
+\end{itemize}
+
+\subsubsection{BFF API Endpoints}
+
+Express.js BFF (port 3001) cung cấp 4 endpoint:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|l|l|l|}
+\hline
+\textbf{Endpoint} & \textbf{Params} & \textbf{Mô tả} \\
+\hline
+\texttt{GET /api/products} & --- & Danh sách ASIN \\
+\hline
+\texttt{GET /api/overview} & dateRange, productAsin, confidenceMin/Max & Thống kê tổng quan \\
+\hline
+\texttt{GET /api/trend} & dateRange, productAsin & Xu hướng theo ngày \\
+\hline
+\texttt{GET /api/reviews} & dateRange, productAsin, page, limit, confidenceMin/Max & Danh sách review \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Mô hình RoBERTa}
+
+\subsubsection{Giới thiệu RoBERTa}
+
+RoBERTa (Robustly Optimized BERT Pretraining Approach) là mô hình ngôn ngữ lớn được phát triển bởi Facebook AI, cải tiến từ BERT với các kỹ thuật:
+\begin{itemize}
+    \item Huấn luyện lâu hơn với batch size lớn hơn
+    \item Loại bỏ next sentence prediction objective
+    \item Huấn luyện trên tập dữ liệu lớn hơn (160GB text)
+    \item Dynamic masking thay vì static masking
+\end{itemize}
+
+\subsubsection{Model được sử dụng}
+
+Đồ án sử dụng checkpoint \texttt{cardiffnlp/twitter-roberta-base-sentiment} từ Hugging Face:
+\begin{itemize}
+    \item Fine-tuned trên 58 triệu tweet từ Twitter
+    \item 3 nhãn đầu ra: \textbf{positive}, \textbf{neutral}, \textbf{negative}
+    \item Input tối đa 512 token
+    \item Tokenizer tương ứng: \texttt{AutoTokenizer} với \texttt{normalization=True}
+\end{itemize}
+
+\subsubsection{Quy trình inference}
+
+\begin{enumerate}
+    \item Đọc message từ Kafka topic \texttt{processed\_comments}
+    \item Tokenize văn bản với \texttt{AutoTokenizer}
+    \item Chạy forward pass qua mô hình, lấy logits
+    \item Áp dụng softmax để ra xác suất 3 nhãn
+    \item Chọn nhãn có xác suất cao nhất làm \texttt{sentiment\_label}
+    \item Giá trị xác suất cao nhất là \texttt{confidence\_score}
+    \item Publish kết quả vào topic \texttt{final\_comments}
+\end{enumerate}
+
+Để tối ưu hiệu suất, \texttt{model.py} xử lý theo batch nhỏ (default 8 messages/batch) và chạy inference trên CPU hoặc GPU tùy môi trường.

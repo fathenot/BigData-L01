@@ -1,0 +1,42 @@
+\section{Giới thiệu}
+
+\subsection{Bối cảnh}
+
+Trong thời đại số hóa hiện nay, mạng xã hội và các sàn thương mại điện tử như Amazon tạo ra hàng triệu đánh giá sản phẩm mỗi ngày. Việc phân tích cảm xúc (sentiment analysis) từ các đánh giá này giúp doanh nghiệp nắm bắt nhanh phản hồi của khách hàng, từ đó đưa ra quyết định kinh doanh kịp thời.
+
+Tuy nhiên, với khối lượng dữ liệu lớn và tốc độ sinh ra liên tục (velocity), các phương pháp xử lý truyền thống theo batch không đáp ứng được nhu cầu phân tích theo thời gian thực.
+
+\subsection{Vấn đề đặt ra}
+
+Các hệ thống phân tích cảm xúc hiện tại thường gặp những hạn chế sau:
+
+\begin{itemize}
+    \item \textbf{Độ trễ cao}: Xử lý batch theo giờ hoặc ngày khiến thông tin không phản ánh được tình trạng hiện tại.
+    \item \textbf{Thiếu khả năng mở rộng}: Hệ thống đơn lẻ không xử lý được khi lượng dữ liệu tăng đột biến.
+    \item \textbf{Độ chính xác thấp}: Các phương pháp dựa trên từ điển hoặc mô hình đơn giản không nắm bắt được ngữ cảnh phức tạp.
+    \item \textbf{Không có giao diện trực quan}: Kết quả phân tích khó theo dõi và giám sát theo thời gian thực.
+\end{itemize}
+
+\subsection{Nghiên cứu liên quan}
+
+Nhiều nghiên cứu đã đề xuất các kiến trúc streaming để xử lý dữ liệu cảm xúc:
+
+\begin{itemize}
+    \item \textbf{Lambda Architecture}: Kết hợp batch layer và speed layer, nhưng phức tạp trong vận hành.
+    \item \textbf{Kappa Architecture}: Chỉ dùng stream processing, đơn giản hơn nhưng yêu cầu hệ thống message queue mạnh.
+    \item \textbf{Apache Kafka + Spark Streaming}: Phổ biến trong công nghiệp nhưng Spark có độ trễ micro-batch.
+\end{itemize}
+
+Đồ án này lựa chọn kiến trúc Kappa với Apache Kafka và Apache Flink để đạt độ trễ thấp nhất, kết hợp mô hình RoBERTa cho độ chính xác cao.
+
+\subsection{Giải pháp đề xuất}
+
+Chúng tôi đề xuất một pipeline xử lý luồng dữ liệu hoàn chỉnh:
+
+\begin{enumerate}
+    \item \textbf{Thu thập dữ liệu}: Đọc review từ dataset Amazon và đưa vào Kafka topic.
+    \item \textbf{Tiền xử lý}: Apache Flink làm sạch văn bản (loại URL, @mention, \#hashtag).
+    \item \textbf{Phân tích cảm xúc}: Mô hình RoBERTa phân loại positive/neutral/negative với điểm tin cậy.
+    \item \textbf{Lưu trữ}: Kết quả được lưu vào PostgreSQL theo schema chuẩn hóa.
+    \item \textbf{Trực quan hóa}: Dashboard React hiển thị thống kê và bảng review theo thời gian thực.
+\end{enumerate}

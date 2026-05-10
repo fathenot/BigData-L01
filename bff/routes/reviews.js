@@ -5,12 +5,14 @@ const router  = express.Router();
 const INTERVALS = { '1d': '1 day', '3d': '3 days', '7d': '7 days', '30d': '30 days' };
 
 router.get('/', async (req, res) => {
-  const interval    = INTERVALS[req.query.dateRange] || '7 days';
-  const productAsin = req.query.productAsin || null;
-  const sentiment   = req.query.sentiment   || null;
-  const limit       = parseInt(req.query.limit) || 50;
-  const page        = parseInt(req.query.page)  || 1;
-  const offset      = (page - 1) * limit;
+  const interval      = INTERVALS[req.query.dateRange] || '7 days';
+  const productAsin   = req.query.productAsin  || null;
+  const sentiment     = req.query.sentiment    || null;
+  const limit         = parseInt(req.query.limit) || 50;
+  const page          = parseInt(req.query.page)  || 1;
+  const offset        = (page - 1) * limit;
+  const confidenceMin = req.query.confidenceMin != null && req.query.confidenceMin !== '' ? parseFloat(req.query.confidenceMin) : null;
+  const confidenceMax = req.query.confidenceMax != null && req.query.confidenceMax !== '' ? parseFloat(req.query.confidenceMax) : null;
 
   try {
     const [dataResult, countResult] = await Promise.all([
@@ -21,20 +23,24 @@ router.get('/', async (req, res) => {
          FROM sentimentresult sr
          JOIN amazonreview ar ON sr.review_id = ar.review_id
          WHERE ar.event_time >= NOW() - $1::interval
-           AND ($2::text IS NULL OR ar.product_asin = $2)
-           AND ($3::text IS NULL OR sr.sentiment_label = $3)
+           AND ($2::text    IS NULL OR ar.product_asin      =  $2)
+           AND ($3::text    IS NULL OR sr.sentiment_label   =  $3)
+           AND ($6::numeric IS NULL OR sr.confidence_score >= $6)
+           AND ($7::numeric IS NULL OR sr.confidence_score <= $7)
          ORDER BY ar.event_time DESC
          LIMIT $4 OFFSET $5`,
-        [interval, productAsin, sentiment, limit, offset]
+        [interval, productAsin, sentiment, limit, offset, confidenceMin, confidenceMax]
       ),
       pool.query(
         `SELECT COUNT(*) AS total
          FROM sentimentresult sr
          JOIN amazonreview ar ON sr.review_id = ar.review_id
          WHERE ar.event_time >= NOW() - $1::interval
-           AND ($2::text IS NULL OR ar.product_asin = $2)
-           AND ($3::text IS NULL OR sr.sentiment_label = $3)`,
-        [interval, productAsin, sentiment]
+           AND ($2::text    IS NULL OR ar.product_asin      =  $2)
+           AND ($3::text    IS NULL OR sr.sentiment_label   =  $3)
+           AND ($4::numeric IS NULL OR sr.confidence_score >= $4)
+           AND ($5::numeric IS NULL OR sr.confidence_score <= $5)`,
+        [interval, productAsin, sentiment, confidenceMin, confidenceMax]
       ),
     ]);
 
