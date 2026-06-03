@@ -29,9 +29,56 @@ FILE_CONFIGS = {
         'text_col': 'reviewText',
         'label_col': 'overall',
         'label_map': {'1.0': 0, '2.0': 0, '3.0': 0, '4.0': 1, '5.0': 1, }
-    }
-    
+    },
+
+    # =====================================================================
+    # VIETNAMESE DATASETS — added for multilingual training
+    # Source: data_ingestion/vietnamese_data/
+    # Schema output: {"timestamp", "textComment", "topic", "label"}
+    # Label mapping: positive->1, negative->0, neutral->0
+    # =====================================================================
+    'uit_vsfc.csv': {
+        'format': 'csv_with_header',
+        'text_col': 'text',
+        'label_col': 'label',
+        'label_map': {
+            'positive': 1,
+            'negative': 0,
+            'neutral':  0,
+        }
+    },
+    'minhtoan_sentiment.csv': {
+        'format': 'csv_with_header',
+        'text_col': 'text',
+        'label_col': 'label',
+        'label_map': {
+            'positive': 1,
+            'negative': 0,
+            'neutral':  0,
+        }
+    },
+    'polarbear_sentiment.csv': {
+        'format': 'csv_with_header',
+        'text_col': 'text',
+        'label_col': 'label',
+        'label_map': {
+            'positive': 1,
+            'negative': 0,
+            'neutral':  0,
+        }
+    },
+    'vietnamese_sentiment_combined.csv': {
+        'format': 'csv_with_header',
+        'text_col': 'text',
+        'label_col': 'label',
+        'label_map': {
+            'positive': 1,
+            'negative': 0,
+            'neutral':  0,
+        }
+    },
 }
+
 
 def get_file_generator(file_path, config, topic_tag):
     
@@ -51,7 +98,7 @@ def get_file_generator(file_path, config, topic_tag):
                 except Exception: continue
 
     elif config['format'] == 'csv_with_header':
-        with open(file_path, 'r', encoding='utf-8') as f: 
+        with open(file_path, 'r', encoding='utf-8-sig') as f:   # utf-8-sig strips BOM
             
             reader = csv.DictReader(f) 
             
@@ -75,6 +122,7 @@ def get_file_generator(file_path, config, topic_tag):
                 except Exception: 
                     continue
 
+
     elif config['format'] == 'json_lines':
         with open(file_path, 'r', encoding='utf-8') as f:
             for line in f:
@@ -90,30 +138,45 @@ def get_file_generator(file_path, config, topic_tag):
                 except json.JSONDecodeError: continue
 
 def stream_multisource_data(folder_path='./raw_data'):
-    
-    all_files = [f for f in os.listdir(folder_path) if f in FILE_CONFIGS]
-    
+    """
+    Multiplex multiple data streams randomly.
+    Searches for matching files in:
+      1. folder_path (default: ./raw_data)  — English datasets
+      2. ./data_ingestion/vietnamese_data/  — Vietnamese datasets
+    """
+
+    SEARCH_FOLDERS = [
+        folder_path,
+        os.path.join(os.path.dirname(__file__), 'data_ingestion', 'vietnamese_data'),
+    ]
+
+    all_files = []
+    for search_dir in SEARCH_FOLDERS:
+        if not os.path.isdir(search_dir):
+            continue
+        for f in os.listdir(search_dir):
+            if f in FILE_CONFIGS:
+                all_files.append((f, os.path.join(search_dir, f)))
+
     if not all_files:
-        print(f"⚠️ No valid data files found in '{folder_path}'!")
+        print(f"[EXTRACTOR] No valid data files found in: {SEARCH_FOLDERS}")
         return
 
     active_streams = []
-    for file_name in all_files:
-        file_path = os.path.join(folder_path, file_name)
+    for file_name, file_path in all_files:
         config = FILE_CONFIGS[file_name]
         topic_tag = os.path.splitext(file_name)[0]
-        
         gen = get_file_generator(file_path, config, topic_tag)
-        active_streams.append((file_name, gen)) 
-        print(f"[EXTRACTOR] Connected data stream to: {file_name}")
+        active_streams.append((file_name, gen))
+        print(f"[EXTRACTOR] Connected data stream to: {file_path}")
 
     print(f"\n[EXTRACTOR] Started multiplexing {len(active_streams)} data streams randomly!\n")
 
     while active_streams:
         idx = random.randrange(len(active_streams))
-        file_name, gen = active_streams[idx] 
+        file_name, gen = active_streams[idx]
         try:
             yield next(gen)
         except StopIteration:
-            print(f"\n[EXTRACTOR] 🏁 Stream '{file_name}' has finished broadcasting!")
-            active_streams.pop(idx)
+            print(f"\n[EXTRACTOR] Stream '{file_name}' has finished broadcasting!")
+            active_streams.pop(idx)
