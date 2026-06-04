@@ -17,7 +17,7 @@ FLUSH_INTERVAL = int(os.getenv("MODEL_FLUSH_INTERVAL", 2))
 
 last_flush = time()
 
-MODEL_NAME = os.getenv("MODEL_NAME", "cardiffnlp/twitter-roberta-base-sentiment")
+MODEL_NAME = os.getenv("MODEL_NAME", "./cadiff_vi_finetuned/")
 MODEL_VERSION = os.getenv("MODEL_VERSION", "1.0")
 
 # ====== LOAD MODEL ======
